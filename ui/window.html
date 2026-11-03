@@ -1,0 +1,350 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Push Surface</title>
+<style>
+  :root {
+    --bg: #ececec; --panel: #f6f6f6; --text: #111; --mute: #7a7a7a; --line: #d6d6d6;
+    --accent: #ff6e14; --ok: #2fb34d; --wait: #e09a0b; --bad: #e5483b; --off: #a5a5a5;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111112; --panel: #1a1a1b; --text: #f0f0f0; --mute: #8a8a8e; --line: #2a2a2c; --ok: #34c759; --wait: #ff9f0a; --bad: #ff453a; --off: #5a5a5e; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 13px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; user-select: none; }
+  main { padding: 14px 22px 18px; }
+  .mark { display: flex; align-items: baseline; gap: 10px; font-size: 25px; font-weight: 300; letter-spacing: -0.3px; margin: 2px 0 2px; }
+  .mark .x { color: var(--accent); font-weight: 400; font-size: 21px; }
+  .mark b { font-weight: 600; }
+  .sub { color: var(--mute); font-size: 11px; letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 16px; }
+  .rows { border-top: 1px solid var(--line); }
+  .row { display: grid; grid-template-columns: 14px 92px 1fr; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--off); transition: background .2s; }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 6px color-mix(in srgb, var(--ok) 60%, transparent); }
+  .dot.wait { background: var(--wait); animation: pulse 1.6s ease-in-out infinite; }
+  .dot.bad { background: var(--bad); }
+  .dot.demo { background: var(--accent); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .label { font-weight: 500; }
+  .detail { color: var(--mute); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .preset { display: flex; justify-content: space-between; color: var(--mute); padding: 10px 0 14px; min-height: 37px; }
+  .preset span:first-child { color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; }
+  footer { display: flex; align-items: center; gap: 8px; }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 2px; }
+  .seg button { border: 0; background: transparent; color: var(--mute); padding: 4px 11px; border-radius: 5px; font: inherit; cursor: pointer; }
+  .seg button.on { background: var(--bg); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
+  .btn { margin-left: auto; }
+  .btn, .link { border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 5px 11px; border-radius: 7px; font: inherit; cursor: pointer; }
+  .link { margin-left: 0; }
+  button:active { opacity: .7; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* tabs */
+  .tabs { display: flex; gap: 2px; margin: 0 0 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+  .tabs button { flex: 1; border: 0; background: transparent; color: var(--mute); padding: 5px 0; border-radius: 6px; font: inherit; font-weight: 500; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--bg); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
+  [role="tabpanel"][hidden] { display: none; }
+  .os-win .mac-only, .os-mac .win-only { display: none; }
+  /* manual */
+  .manual { height: 520px; overflow-y: auto; padding-right: 6px; margin-right: -8px; user-select: text; line-height: 1.45; }
+  .manual h2 { font-size: 15px; font-weight: 600; margin: 22px 0 6px; }
+  .manual h2:first-child { margin-top: 2px; }
+  .manual h3 { font-size: 12px; font-weight: 600; color: var(--mute); text-transform: uppercase; letter-spacing: 0.4px; margin: 14px 0 4px; }
+  .manual p { margin: 0 0 8px; }
+  .manual ol, .manual ul { margin: 0 0 8px; padding-left: 18px; }
+  .manual li { margin: 0 0 4px; }
+  .manual table { width: 100%; border-collapse: collapse; margin: 2px 0 10px; font-size: 12px; }
+  .manual th { text-align: left; color: var(--mute); font-weight: 500; padding: 4px 6px 4px 0; border-bottom: 1px solid var(--line); }
+  .manual td { vertical-align: top; padding: 5px 6px 5px 0; border-bottom: 1px solid var(--line); }
+  .manual td:first-child { width: 42%; font-weight: 500; }
+  .manual code { font: 11px ui-monospace, Menlo, monospace; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; }
+  .manual kbd { font: inherit; font-weight: 600; }
+  .manual .note { color: var(--mute); font-size: 12px; }
+  .manual .toc { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; margin: 0 0 4px; }
+  .manual .toc a { color: var(--accent); text-decoration: none; }
+  .manual .toc a:hover { text-decoration: underline; }
+  .manual svg { display: block; width: 100%; height: auto; margin: 4px 0 10px; }
+  .manual svg .box { fill: var(--panel); stroke: var(--line); }
+  .manual svg .hub { fill: var(--panel); stroke: var(--accent); }
+  .manual svg text { fill: var(--text); font: 12px -apple-system, BlinkMacSystemFont, sans-serif; }
+  .manual svg .small { fill: var(--mute); font-size: 10.5px; }
+  .manual svg .wire { stroke: var(--mute); stroke-width: 1.5; }
+  .manual svg .wire.audio { stroke-dasharray: 4 3; }
+  pre { display: none; margin: 14px 0 0; height: 150px; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; font: 11px/1.45 ui-monospace, Menlo, monospace; color: var(--mute); white-space: pre-wrap; user-select: text; }
+  body.log pre { display: block; }
+</style>
+</head>
+<body>
+<main>
+  <!-- product names in plain type -->
+  <div class="mark"><span>disting <b>NT</b></span><span class="x">×</span><span>Push <b>2</b></span></div>
+  <div class="sub">Push Surface</div>
+
+  <div class="tabs" role="tablist" aria-label="Push Surface">
+    <button role="tab" id="tab-status" aria-controls="panel-status" aria-selected="true">Status</button>
+    <button role="tab" id="tab-manual" aria-controls="panel-manual" aria-selected="false" tabindex="-1">Manual</button>
+  </div>
+
+  <section role="tabpanel" id="panel-status" aria-labelledby="tab-status">
+  <div class="rows">
+    <div class="row"><i class="dot" id="d-push"></i><span class="label">Push 2</span><span class="detail" id="t-push">—</span></div>
+    <div class="row"><i class="dot" id="d-screen"></i><span class="label">Push screen</span><span class="detail" id="t-screen">—</span></div>
+    <div class="row"><i class="dot" id="d-nt"></i><span class="label">disting NT</span><span class="detail" id="t-nt">—</span></div>
+  </div>
+  <div class="preset"><span id="preset">No preset</span><span id="slots"></span></div>
+
+  <footer>
+    <div class="seg" role="group" aria-label="Source">
+      <button id="m-live">Surface</button><button id="m-demo">Demo</button>
+    </div>
+    <button class="btn" id="reload" title="Re-read the preset from the module">Reload</button>
+    <button class="link" id="settings" title="Open config.json">Settings</button>
+    <button class="link" id="log">Log</button>
+  </footer>
+  <pre id="logbox"></pre>
+  </section>
+
+  <section role="tabpanel" id="panel-manual" aria-labelledby="tab-manual" hidden>
+    <div class="manual" id="manual" tabindex="0">
+      <nav class="toc" aria-label="Contents">
+        <a href="#man-connect">Connections</a><a href="#man-setup">First setup</a><a href="#man-live">With Ableton Live</a>
+        <a href="#man-top">Top &amp; screen</a><a href="#man-left">Left buttons</a><a href="#man-right">Right buttons</a>
+        <a href="#man-modes">Modes</a><a href="#man-pads">Pads</a><a href="#man-window">This window</a><a href="#man-trouble">Troubleshooting</a>
+      </nav>
+
+      <h2 id="man-connect">Connections</h2>
+      <p>Push Surface runs on your computer and sits between the Push 2 and the disting NT. Both plug into the computer over USB; they never connect to each other.</p>
+      <svg viewBox="0 0 396 178" role="img" aria-label="Push 2 and disting NT each connect to the Mac by USB; an audio interface such as the Volt 4 is optional">
+        <line class="wire" x1="104" y1="56" x2="150" y2="56"/>
+        <line class="wire" x1="246" y1="56" x2="292" y2="56"/>
+        <line class="wire audio" x1="198" y1="80" x2="198" y2="122"/>
+        <rect class="box" x="4" y="32" width="100" height="48" rx="8"/>
+        <text x="54" y="53" text-anchor="middle">Push 2</text>
+        <text class="small" x="54" y="69" text-anchor="middle">own power supply</text>
+        <rect class="hub" x="150" y="32" width="96" height="48" rx="8"/>
+        <text x="198" y="53" text-anchor="middle">Computer</text>
+        <text class="small" x="198" y="69" text-anchor="middle">Push Surface</text>
+        <rect class="box" x="292" y="32" width="100" height="48" rx="8"/>
+        <text x="342" y="53" text-anchor="middle">disting NT</text>
+        <text class="small" x="342" y="69" text-anchor="middle">rack powered</text>
+        <rect class="box" x="140" y="122" width="116" height="48" rx="8"/>
+        <text x="198" y="143" text-anchor="middle">Audio interface</text>
+        <text class="small" x="198" y="159" text-anchor="middle">e.g. Volt 4 · optional</text>
+        <text class="small" x="127" y="49" text-anchor="middle">USB</text>
+        <text class="small" x="269" y="49" text-anchor="middle">USB-C</text>
+        <text class="small" x="205" y="104">audio</text>
+      </svg>
+      <ul>
+        <li><b>Push 2</b>: USB to the computer, plus its own power adapter so the pads and screen run at full brightness.</li>
+        <li><b>disting NT</b>: USB-C socket (left of its display) to the computer. The rack must be on; the NT takes no power over USB. The same cable carries MIDI, which Push Surface uses, and audio, which Live can use.</li>
+        <li><b>Audio</b>: optional and separate. Push Surface doesn't touch audio.</li>
+      </ul>
+
+      <h2 id="man-setup">First setup</h2>
+      <ol>
+        <li>Plug in both devices as above, then open Push Surface. The <b>Status</b> tab should show three green lights.</li>
+        <li>On the disting NT, check <b>Settings → SysEx Device ID</b> is <code>0</code>, or set <code>sysExId</code> to match (Status tab → <b>Settings</b>).</li>
+        <li>Optional: turn on <b>SysEx changes</b> in the NT's Settings menu, so the module's screen jumps to whatever you turn on the Push.</li>
+        <li>To try it with no module, choose <b>Demo</b> on the Status tab.</li>
+        <li class="win-only"><b>Windows, Push screen</b>: the screen needs Ableton's <i>Push 2 display driver</i>. Live installs it the first time it runs with the Push connected. Without Live, install the WinUSB driver for the Push 2's display interface with Zadig.</li>
+      </ol>
+      <p class="note">Push Surface switches the Push to User mode when it connects, and back to Live mode when you quit.</p>
+      <p class="note win-only">Windows: Push Surface talks to the Push through its second MIDI port, <i>MIDIIN2/MIDIOUT2 (Ableton Push 2)</i>.</p>
+
+      <h2 id="man-live">Using it while Ableton Live is running</h2>
+      <p>Live's own Push 2 support grabs the Push as soon as Live starts: it switches the Push to Live mode and takes its screen. Push Surface keeps running but loses control. To run both at once, tell Live to leave the Push alone:</p>
+      <ol>
+        <li>In Live, open <b>Settings → Link, Tempo &amp; MIDI</b> (Live 11: <span class="mac-only">Live → Preferences</span><span class="win-only">Options → Preferences</span>).</li>
+        <li>Under <b>Control Surface</b>, change the row set to <b>Push2</b> to <b>None</b>, and set that row's <b>Input</b> and <b>Output</b> to <b>None</b>.</li>
+        <li>In the <b>MIDI Ports</b> list, turn <b>Track</b> and <b>Remote</b> off for both <i>Ableton Push 2</i> ports (Live Port and User Port), so Live doesn't also react to the pads.</li>
+        <li>Back in Push Surface, press <b>Reload</b>, or quit and reopen it, so it takes the Push and its screen back. The <i>Push screen</i> light turns green.</li>
+      </ol>
+      <p>Live keeps working with the disting NT alongside Push Surface<span class="mac-only">; both can talk to it at once</span>.</p>
+      <p class="win-only note">Windows: a classic MIDI port can be open in only one app at a time, unless your Windows 11 has the newer multi-client MIDI (Windows MIDI Services). If the disting NT light stays amber while Live is open, turn the disting NT's ports off in Live's MIDI Ports list too.</p>
+      <ul>
+        <li><b>Sequence the NT from Live</b>: in MIDI Ports, turn <b>Track</b> on for the <i>disting NT</i> output, then send a MIDI track to it.</li>
+        <li><b>Record or play audio through the NT</b>: choose <i>disting NT</i> as Live's audio device<span class="mac-only">, or an Aggregate Device with your interface</span>, and add the NT's <i>USB audio (to host)</i> and <i>(from host)</i> algorithms<span class="win-only"> (Windows needs Expert Sleepers' audio driver for this)</span>. On the NT, turn on <b>Settings → Engine → Allow USB rate change</b>.</li>
+      </ul>
+      <p class="note">To use the Push for Live again, set the Control Surface back to Push2 and quit Push Surface. Live remembers these settings, so you only change them when you switch.</p>
+
+      <h2 id="man-top">Top of the Push &amp; the screen</h2>
+      <p>The 8 buttons <b>above</b> the screen pick a slot (algorithm); the 8 <b>below</b> pick one of that slot's own parameter pages. The 8 encoders always control the 8 parameters shown.</p>
+      <table>
+        <tr><th>Control</th><th>Does</th></tr>
+        <tr><td>8 encoders</td><td>Change the parameter shown under each</td></tr>
+        <tr><td>Shift + encoder</td><td>Fine adjustment</td></tr>
+        <tr><td>Touch an encoder</td><td>Highlight it, and show that parameter on the NT's screen</td></tr>
+        <tr><td>Delete + touch encoder</td><td>Reset to default</td></tr>
+        <tr><td>Buttons above the screen</td><td>Select slot 1–8 (bypassed slots are struck through)</td></tr>
+        <tr><td>Buttons below the screen</td><td>Select a parameter page; same button again = next row of 8</td></tr>
+        <tr><td>Master encoder (top right)</td><td>Scroll through slots</td></tr>
+        <tr><td>Tempo encoder (top left)</td><td>Scroll through pages</td></tr>
+        <tr><td>Swing encoder (top left)</td><td>Scroll through rows of 8</td></tr>
+        <tr><td>Touch strip</td><td>Pitch bend into the NT</td></tr>
+      </table>
+
+      <h2 id="man-left">Left-hand buttons</h2>
+      <p>Anything that can lose work asks first: confirm with <b>Select</b> or the last button below the screen; any other button cancels.</p>
+      <table>
+        <tr><th>Button</th><th>Does</th></tr>
+        <tr><td>Delete</td><td>Hold + touch encoder: reset parameter. Hold + slot button: remove that slot. In Mix: hold + touch: remove from performance page</td></tr>
+        <tr><td>Undo</td><td>Undo the last parameter change; Shift + Undo redoes</td></tr>
+        <tr><td>Mute</td><td>Bypass / un-bypass the selected slot. Hold + slot button: bypass that slot</td></tr>
+        <tr><td>Solo</td><td>Bypass every other slot; press again to undo</td></tr>
+        <tr><td>Duplicate</td><td>Copy the selected slot, with its settings and values, right after it</td></tr>
+        <tr><td>New</td><td>Start a new, empty preset (asks first)</td></tr>
+        <tr><td>Automate</td><td>Mappings mode (see Modes)</td></tr>
+        <tr><td>Record</td><td>Save the preset to the NT's SD card (asks first)</td></tr>
+      </table>
+      <p class="note">Tap Tempo, Metronome, Stop Clip, Convert, Double Loop, Quantize, Fixed Length and Play aren't used.</p>
+
+      <h2 id="man-right">Right-hand buttons</h2>
+      <table>
+        <tr><th>Button</th><th>Does</th></tr>
+        <tr><td>Setup</td><td>CPU use per slot; Shift + Setup reloads the preset from anywhere</td></tr>
+        <tr><td>Add Device</td><td>Add an algorithm from the NT's library</td></tr>
+        <tr><td>Device</td><td>Back to parameter editing</td></tr>
+        <tr><td>Mix</td><td>Performance page; Shift + Mix adds the last touched parameter to it</td></tr>
+        <tr><td>Browse</td><td>Presets on the SD card</td></tr>
+        <tr><td>Clip</td><td>The NT's own front panel</td></tr>
+        <tr><td>◀ ▶</td><td>Previous / next slot; Shift + ◀ ▶ moves the slot</td></tr>
+        <tr><td>▲ ▼</td><td>Previous / next row of 8 (in lists: move up / down)</td></tr>
+        <tr><td>Page ◀ ▶</td><td>Previous / next page; with Shift, jump 8</td></tr>
+        <tr><td>Accent</td><td>Fixed velocity on / off</td></tr>
+        <tr><td>Scale</td><td>Pad settings</td></tr>
+        <tr><td>Note / Session</td><td>Pads play notes / pads map slots and pages</td></tr>
+        <tr><td>Octave ▲ ▼</td><td>Shift the pad range</td></tr>
+        <tr><td>Shift</td><td>Hold for the alternative actions above</td></tr>
+        <tr><td>Select</td><td>Confirm a question; choose in lists</td></tr>
+      </table>
+      <p class="note">User, Add Track, Repeat and Layout aren't used.</p>
+
+      <h2 id="man-modes">Modes</h2>
+      <p>Press a mode button to enter it; press it again, or <b>Device</b>, to go back.</p>
+      <h3>Add Device</h3>
+      <p>Every algorithm the module knows, built-ins and plug-ins. Turn encoder 1 or Master to scroll; encoder 2 jumps by first letter. Press <b>Select</b> or <b>Add</b>. If the algorithm has options (channels, voices, buffer size), set them on the next page with the encoders and press <b>Add</b>. The new slot goes at the end.</p>
+      <h3>Browse</h3>
+      <p>The <code>/presets</code> folder on the SD card, folders first. Scroll with encoder 1, Master or ▲ ▼ (Page ◀ ▶ jumps 5). Buttons below: <b>Load</b>, <b>Append</b> (adds its slots to the current preset), <b>Up</b>, <b>Close</b>.</p>
+      <h3>Mix: performance page</h3>
+      <p>The NT's performance-page parameters, 8 at a time with their own labels; the buttons below pick each group of 8. Needs NT firmware 1.16 or later.</p>
+      <h3>Automate: mappings</h3>
+      <p>CV, MIDI and I2C mappings of the last parameter you touched or turned. Buttons below pick <b>CV</b>, <b>MIDI</b> or <b>I2C</b>; encoders set channel, type, CC, range and so on. Changes go to the module as you turn.</p>
+      <h3>Clip: the NT's front panel</h3>
+      <p>Shows the NT's own screen and turns the Push into its controls, so you can reach every menu on the module.</p>
+      <table>
+        <tr><th>Push 2</th><th>disting NT</th></tr>
+        <tr><td>Encoders 1–3</td><td>Left, centre, right pot (Shift = fine)</td></tr>
+        <tr><td>Encoders 4–5, Master</td><td>Left encoder, right encoder</td></tr>
+        <tr><td>Buttons above the screen 1–5</td><td>Press left / centre / right pot, left / right encoder</td></tr>
+        <tr><td>Buttons below the screen 1–4</td><td>Buttons 1–4</td></tr>
+      </table>
+      <h3>Scale</h3>
+      <p>Pad settings: <b>Root</b>, <b>Scale</b> (12, from Major to Whole tone), <b>Layout</b> (Chromatic or In key), <b>Velocity</b> (Dynamic or Fixed) and the <b>MIDI channel</b> the pads play on. <b>Done</b> returns.</p>
+
+      <h2 id="man-pads">Pads</h2>
+      <ul>
+        <li><b>Note</b> (default): play the NT's synth algorithms, with velocity and poly aftertouch. Chromatic layout = a semitone per pad, a fourth per row, C pads lit. In key = only the scale's notes. Set the algorithm's MIDI channel to match the pads (default 1).</li>
+        <li><b>Session</b>: each column is a slot, each row one of its pages; tap to jump there. Current = orange, bypassed = red.</li>
+      </ul>
+
+      <h2 id="man-window">This window</h2>
+      <table>
+        <tr><th>Light</th><th>Meaning</th></tr>
+        <tr><td>Push 2</td><td>Green: connected, in User mode · amber: waiting for it</td></tr>
+        <tr><td>Push screen</td><td>Green: Push Surface draws on it · red: Ableton Live holds it · amber: waiting</td></tr>
+        <tr><td>disting NT</td><td>Green: connected · amber: waiting for USB · orange: demo · red: not answering (SysEx ID)</td></tr>
+      </table>
+      <ul>
+        <li><b>Surface / Demo</b>: your real NT or the simulated one; remembered.</li>
+        <li><b>Reload</b>: re-read the preset, and take the Push back if Live had it.</li>
+        <li><b>Settings</b>: opens <code>config.json</code> (SysEx ID, pad channel, port name). Quit and reopen after editing.</li>
+        <li><b>Log</b>: what Push Surface is doing; also in <code class="mac-only">~/Library/Logs/Push Surface.log</code><code class="win-only">%APPDATA%\Push Surface\push-surface.log</code>.</li>
+      </ul>
+      <p class="note">Closing the window<span class="mac-only"> or pressing ⌘Q</span> quits Push Surface and hands the Push back to Live mode.</p>
+
+      <h2 id="man-trouble">Troubleshooting</h2>
+      <table>
+        <tr><th>Symptom</th><th>Fix</th></tr>
+        <tr><td>Push stops responding when Live opens</td><td>Live took it: see <a href="#man-live">Using it while Ableton Live is running</a></td></tr>
+        <tr><td>Push screen light red</td><td>Live holds the screen: same fix, then Reload</td></tr>
+        <tr><td>Push 2 light amber</td><td>Check its power adapter and USB cable</td></tr>
+        <tr><td>disting NT light amber</td><td>Check the USB-C cable and that the rack is on; Log lists the MIDI ports found</td></tr>
+        <tr><td>disting NT light red</td><td>SysEx ID mismatch: set <code>sysExId</code> to the NT's SysEx Device ID</td></tr>
+        <tr><td>Mix says performance page unavailable</td><td>Update the NT to firmware 1.16 or later</td></tr>
+        <tr><td>Pads play nothing</td><td>Match the algorithm's MIDI channel to the pads (Scale mode)</td></tr>
+        <tr class="mac-only"><td>App won't open after an update</td><td>System Settings → Privacy &amp; Security → Open Anyway</td></tr>
+        <tr class="win-only"><td>“Windows protected your PC”</td><td>Click <b>More info → Run anyway</b> (the app isn't code-signed)</td></tr>
+        <tr class="win-only"><td>Push screen stays amber on Windows</td><td>Install the Push 2 display driver: open Live once with the Push connected, or use Zadig (WinUSB)</td></tr>
+      </table>
+    </div>
+  </section>
+</main>
+<script>
+  document.documentElement.classList.add(/Windows/.test(navigator.userAgent) ? 'os-win' : 'os-mac');
+  const $ = (id) => document.getElementById(id);
+  const TEXT = {
+    push: { connected: ['ok', 'Connected · User mode'], waiting: ['wait', 'Plug in and switch on'] },
+    screen: { connected: ['ok', 'Connected'], busy: ['bad', 'In use by Ableton Live'], waiting: ['wait', 'Waiting for Push'], off: ['', 'Off in settings'] },
+    nt: { connected: ['ok', 'Connected'], searching: ['wait', 'Plug in over USB'], demo: ['demo', 'Simulated — demo mode'], silent: ['bad', 'Not answering — check SysEx ID'] },
+  };
+  function setRow(key, value, extra) {
+    const [cls, text] = TEXT[key][value] ?? ['', value];
+    $('d-' + key).className = 'dot ' + cls;
+    $('t-' + key).textContent = extra ? `${text} · ${extra}` : text;
+  }
+  window.ntpush.onStatus((s) => {
+    setRow('push', s.push);
+    setRow('screen', s.push === 'connected' || s.screen !== 'waiting' ? s.screen : 'waiting');
+    setRow('nt', s.nt);
+    $('preset').textContent = s.preset ? s.preset : s.nt === 'searching' ? 'No preset' : 'Reading preset…';
+    $('slots').textContent = s.preset ? `${s.slots} slot${s.slots === 1 ? '' : 's'}${s.slot ? ' · ' + s.slot : ''}` : '';
+    $('m-live').classList.toggle('on', s.mode !== 'demo');
+    $('m-demo').classList.toggle('on', s.mode === 'demo');
+  });
+  window.ntpush.onLog((line) => {
+    const box = $('logbox');
+    const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 4;
+    box.textContent += line + '\n';
+    if (box.textContent.length > 40000) box.textContent = box.textContent.slice(-30000);
+    if (atEnd) box.scrollTop = box.scrollHeight;
+  });
+  $('m-live').onclick = () => window.ntpush.setMode('live');
+  $('m-demo').onclick = () => window.ntpush.setMode('demo');
+  $('reload').onclick = () => window.ntpush.reload();
+  $('settings').onclick = () => window.ntpush.openSettings();
+  // size the native window to the content
+  const fit = () => window.ntpush.resize(document.body.scrollHeight);
+  window.addEventListener('load', fit);
+  $('log').onclick = () => { document.body.classList.toggle('log'); fit(); };
+
+  // Status / Manual tabs
+  const tabs = [$('tab-status'), $('tab-manual')];
+  function showTab(tab) {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute('aria-selected', on);
+      t.tabIndex = on ? 0 : -1;
+      $(t.getAttribute('aria-controls')).hidden = !on;
+    }
+    fit();
+  }
+  for (const t of tabs) {
+    t.onclick = () => showTab(t);
+    t.onkeydown = (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const next = tabs[(tabs.indexOf(t) + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      next.focus(); showTab(next);
+    };
+  }
+  // contents links scroll inside the manual
+  $('manual').addEventListener('click', (e) => {
+    const a = e.target.closest('a[href^="#"]');
+    if (!a) return;
+    e.preventDefault();
+    document.getElementById(a.getAttribute('href').slice(1))?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
+</script>
+</body>
+</html>

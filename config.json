@@ -1,0 +1,7 @@
+{
+  "sysExId": 0,
+  "noteChannel": 1,
+  "ntPort": "disting NT",
+  "pollMs": 250,
+  "display": true
+}

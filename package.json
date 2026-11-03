@@ -1,0 +1,24 @@
+{
+  "name": "push-surface",
+  "version": "1.6.0",
+  "description": "Ableton Push 2 control surface for the Expert Sleepers disting NT",
+  "main": "src/main.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --test test/run.test.js",
+    "demo": "node src/main.js --demo"
+  },
+  "keywords": [],
+  "author": "gregdalmata",
+  "license": "MIT",
+  "dependencies": {
+    "@julusian/midi": "^3.8.1",
+    "@napi-rs/canvas": "^1.0.13",
+    "usb": "^3.2.1"
+  },
+  "type": "module",
+  "productName": "Push Surface"
+}
